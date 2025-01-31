@@ -436,30 +436,57 @@ int main(int argc, char* argv[]) {
     }
     printf("\n");
 
-    // basically we are doing logic with bitshifting
-    // for each combination, set input bits + print results
+    // // basically we are doing logic with bitshifting
+    // // for each combination, set input bits + print results
+    // for (int combination = 0; combination < numCombinations; combination++) {
+    //     // assign bits to input nodes (in sorted order)
+    //     for (int i = 0; i < numInputs; i++) {
+    //         // shift numInputs - 1 - i
+    //         int bitVal = (combination >> (numInputs - 1 - i)) & 1;
+    //         inputNodes.arr[i]->value = bitVal;
+    //     }
+
+    //     // print each input node's value in ascending ID order
+    //     for (int i = 0; i < numInputs; i++) {
+    //         printf("%d ", inputNodes.arr[i]->value);
+    //     }
+
+    //     printf("| ");
+
+    //     // evaluate & print each output in ascending ID order
+    //     for (int i = 0; i < numOutputs; i++) {
+    //         int result = dfs(&nodes, outputNodes.arr[i]);
+    //         printf("%d ", result);
+    //     }
+    //     printf("\n");
+    // }
+
     for (int combination = 0; combination < numCombinations; combination++) {
-        // assign bits to input nodes (in sorted order)
-        for (int i = 0; i < numInputs; i++) {
-            // shift numInputs - 1 - i
-            int bitVal = (combination >> (numInputs - 1 - i)) & 1;
-            inputNodes.arr[i]->value = bitVal;
-        }
+    // OLD:
+    // for (int i = 0; i < numInputs; i++) {
+    //     int bitVal = (combination >> (numInputs - 1 - i)) & 1;
+    //     inputNodes.arr[i]->value = bitVal;
+    // }
 
-        // print each input node's value in ascending ID order
-        for (int i = 0; i < numInputs; i++) {
-            printf("%d ", inputNodes.arr[i]->value);
-        }
-
-        printf("| ");
-
-        // evaluate & print each output in ascending ID order
-        for (int i = 0; i < numOutputs; i++) {
-            int result = dfs(&nodes, outputNodes.arr[i]);
-            printf("%d ", result);
-        }
-        printf("\n");
+    // NEW:
+    for (int i = 0; i < numInputs; i++) {
+        int bitVal = (combination >> i) & 1;
+        inputNodes.arr[i]->value = bitVal;
     }
+
+    // Now, when printing, just print inputNodes.arr[i]->value in ascending order of i:
+    for (int i = 0; i < numInputs; i++) {
+        printf("%d ", inputNodes.arr[i]->value);
+    }
+    printf("| ");
+
+    // Evaluate & print each output
+    for (int i = 0; i < numOutputs; i++) {
+        int result = dfs(&nodes, outputNodes.arr[i]);
+        printf("%d ", result);
+    }
+    printf("\n");
+}
 
     // free all memory
     freeArrayListNode(&inputNodes);
