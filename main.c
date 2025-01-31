@@ -474,7 +474,7 @@ int main(int argc, char* argv[]) {
         inputNodes.arr[i]->value = bitVal;
     }
 
-    // Now, when printing, just print inputNodes.arr[i]->value in ascending order of i:
+    // now, when printing, just print inputNodes.arr[i]->value in ascending order of i:
     for (int i = 0; i < numInputs; i++) {
         printf("%d ", inputNodes.arr[i]->value);
     }
@@ -483,7 +483,11 @@ int main(int argc, char* argv[]) {
     // Evaluate & print each output
     for (int i = 0; i < numOutputs; i++) {
         int result = dfs(&nodes, outputNodes.arr[i]);
-        printf("%d ", result);
+        if (i < numOutputs - 1) {
+            printf("%d ", result);
+        } else {
+            printf("%d", result);
+        }
     }
 
     if (combination < numCombinations - 1) {
