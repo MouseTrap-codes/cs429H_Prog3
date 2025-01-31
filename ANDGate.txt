@@ -1,0 +1,26 @@
+{
+{
+Type=INPUT
+UniqueID=0
+Input=
+Output=2,
+}
+{
+Type=INPUT
+UniqueID=1
+Input=
+Output=2,
+}
+{
+Type=AND
+UniqueID=2
+Input=1, 2,
+Output=3,
+}
+{
+Type=OUTPUT
+UniqueID=3
+Input=0,
+Output=
+}
+}
