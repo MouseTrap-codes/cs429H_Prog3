@@ -485,7 +485,10 @@ int main(int argc, char* argv[]) {
         int result = dfs(&nodes, outputNodes.arr[i]);
         printf("%d ", result);
     }
-    printf("\n");
+
+    if (combination < numCombinations - 1) {
+        printf("\n");
+    }
 }
 
     // free all memory
