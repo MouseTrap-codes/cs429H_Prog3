@@ -48,7 +48,7 @@ void freeArrayList(ArrayList* dArr) {
 }
 ////////////////////////////////////////////////////////////////////////////////////////
 
-// here we implement the node ////////////////////////////////////////////////////////////////////////////////////////
+// here we define node types ////////////////////////////////////////////////////////////////////////////////////////
 typedef enum {
     AND,
     OR,
@@ -58,14 +58,22 @@ typedef enum {
     OUTPUT
 } Type;
 
+// here we implement the node struct, now with memoization fields ////////////////////////////////////////////////////////////////////////////////////////
 typedef struct {
     Type type;
     uint32_t uniqueID;
     ArrayList inputs;   // IDs of input nodes
     ArrayList outputs;  // IDs of output nodes
-    int value;          // Only used for INPUT nodes (and read in DFS)
+
+    // For INPUT nodes, 'value' is the bit assigned in main().
+    int value;          
+
+    // Memoization fields
+    int hasCachedValue; // 0 = not computed yet for this combination, 1 = cachedValue is valid
+    int cachedValue;    
 } Node;
 
+// createNode initializes defaults, including memo fields
 Node* createNode(void) {
     Node* this = (Node*)malloc(sizeof(Node));
     if (this == NULL) {
@@ -77,12 +85,13 @@ Node* createNode(void) {
     createArrayList(&(this->inputs), 16);
     createArrayList(&(this->outputs), 16);
     this->value = 0;
+    this->hasCachedValue = 0;
+    this->cachedValue = 0;
     return this;
 }
 ////////////////////////////////////////////////////////////////////////////////////////
 
-
-// here we make an arraylist of node pointers so that we don't make shallow copies of nodes -- saving memory! ////////////////////////////////////////////////////////////////////////////////////////
+// here we have an arraylist of node pointers ////////////////////////////////////////////////////////////////////////////////////////
 typedef struct {
     Node** arr;
     size_t used;
@@ -256,7 +265,8 @@ void parseFile(const char* filename, ArrayListNode* nodes) {
 }
 ////////////////////////////////////////////////////////////////////////////////////////
 
-// here we implement the dfs  ////////////////////////////////////////////////////////////////////////////////////////
+// here we implement the dfs with memoization  ////////////////////////////////////////////////////////////////////////////////////////
+
 // AND operation
 int bitwiseAND(ArrayList* in) {
     if (in->used < 2) {
@@ -289,6 +299,7 @@ int bitwiseNOT(ArrayList* in) {
         printf("Error: NOT requires exactly one input.\n");
         exit(1);
     }
+    // Only the LSB matters for typical boolean logic, so we mask with &1:
     return ~get(in, 0) & 1;
 }
 
@@ -305,8 +316,7 @@ int bitwiseXOR(ArrayList* in) {
     return output;
 }
 
-// we find the corresponding node based on an input ID
-// we just loop through all of the nodes and check for a match
+// find the corresponding node based on its unique ID (linear search)
 Node* findNodeByID(ArrayListNode* nodes, int ID) {
     for (int i = 0; i < (int)nodes->used; i++) {
         if (nodes->arr[i]->uniqueID == (uint32_t)ID) {
@@ -317,18 +327,26 @@ Node* findNodeByID(ArrayListNode* nodes, int ID) {
     exit(1);
 }
 
+// DFS with memoization
 int dfs(ArrayListNode* nodes, Node* currentNode) {
     if (!currentNode) {
         printf("Error: Null node encountered in DFS.\n");
         exit(1);
     }
 
-    // Base case: INPUT node
-    if (currentNode->type == INPUT) {
-        return currentNode->value;
+    // 1) If we already computed this node's output in this combination, return it.
+    if (currentNode->hasCachedValue) {
+        return currentNode->cachedValue;
     }
 
-    // OUTPUT node (pass-through of the first input ID)
+    // 2) If it's an INPUT node, its "value" is directly assigned
+    if (currentNode->type == INPUT) {
+        currentNode->cachedValue = currentNode->value;
+        currentNode->hasCachedValue = 1;
+        return currentNode->cachedValue;
+    }
+
+    // 3) If it's an OUTPUT node, pass through the first input
     if (currentNode->type == OUTPUT) {
         if (currentNode->inputs.used < 1) {
             printf("Error: OUTPUT node has no inputs.\n");
@@ -336,10 +354,13 @@ int dfs(ArrayListNode* nodes, Node* currentNode) {
         }
         int inID = get(&currentNode->inputs, 0);
         Node* inNode = findNodeByID(nodes, inID);
-        return dfs(nodes, inNode);
+
+        currentNode->cachedValue = dfs(nodes, inNode);
+        currentNode->hasCachedValue = 1;
+        return currentNode->cachedValue;
     }
 
-    // For AND, OR, NOT, XOR
+    // 4) For AND, OR, NOT, XOR => gather input values
     ArrayList inputValues;
     createArrayList(&inputValues, 10);
 
@@ -350,6 +371,7 @@ int dfs(ArrayListNode* nodes, Node* currentNode) {
         insert(&inputValues, inVal);
     }
 
+    // 5) Compute output based on gate type
     int outputValue = 0;
     switch (currentNode->type) {
         case AND: 
@@ -368,13 +390,16 @@ int dfs(ArrayListNode* nodes, Node* currentNode) {
             printf("Error: Unsupported gate type in DFS.\n");
             exit(1);
     }
-
     freeArrayList(&inputValues);
+
+    // 6) Cache the computed value and return it
+    currentNode->cachedValue = outputValue;
+    currentNode->hasCachedValue = 1;
     return outputValue;
 }
 ////////////////////////////////////////////////////////////////////////////////////////
 
-////// here we implement the comparator for qsort so we can print our inputs and outputs in order
+// comparator for qsort by unique ID
 static int compareNodePtrByID(const void* a, const void* b) {
     Node* n1 = *(Node**)a;
     Node* n2 = *(Node**)b;
@@ -382,23 +407,20 @@ static int compareNodePtrByID(const void* a, const void* b) {
 }
 ////////////////////////////////////////////////////////////////////////////////////////
 
-////// here we loop through every permutation of inputs and use dfs to print the outputs in truth table form ////////////////////////////////////////////////////////////////////////////////////////
-
 int main(int argc, char* argv[]) {
-    // validate if file name was provided
     if (argc != 2) {
-        printf("a file was not provided to analyze");
+        printf("A file was not provided to analyze.\n");
         return 1;
     }
 
     const char* fileName = argv[1];
-    /// parse the file for nodes
+
+    // 1) Parse the file for nodes
     ArrayListNode nodes;
     createArrayListNode(&nodes, 10);
-    // note that testing was done manually with the testCircuit.txt files, i simply passed in the name of each relevant file as needed
     parseFile(fileName, &nodes);
 
-    // separate the input and output nodes into separate files
+    // 2) Separate the input and output nodes into separate lists
     ArrayListNode inputNodes;
     createArrayListNode(&inputNodes, 10);
     ArrayListNode outputNodes;
@@ -414,88 +436,66 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // sort the input and output nodes by ID
+    // 3) Sort the input and output nodes by ID
     qsort(inputNodes.arr, inputNodes.used, sizeof(Node*), compareNodePtrByID);
     qsort(outputNodes.arr, outputNodes.used, sizeof(Node*), compareNodePtrByID);
 
-    // some prep for truth table
+    // 4) Prepare for truth table
     int numInputs = (int)inputNodes.used;
     int numOutputs = (int)outputNodes.used;
     int numCombinations = (int)pow(2, numInputs);
 
-
-    // print the headers 
+    // 5) Print the header row (Input IDs, then Output IDs)
     for (int i = 0; i < numInputs; i++) {
         Node* inNode = inputNodes.arr[i];
-        printf("%d ", inNode->uniqueID); 
+        printf("%d ", inNode->uniqueID);
     }
     printf("| ");
     for (int i = 0; i < numOutputs; i++) {
         Node* outNode = outputNodes.arr[i];
-        printf("%d ", outNode->uniqueID);
+        if (i < numOutputs - 1) {
+            printf("%d ", outNode->uniqueID);
+        } else {
+            printf("%d", outNode->uniqueID);
+        }
     }
     printf("\n");
 
-    // // basically we are doing logic with bitshifting
-    // // for each combination, set input bits + print results
-    // for (int combination = 0; combination < numCombinations; combination++) {
-    //     // assign bits to input nodes (in sorted order)
-    //     for (int i = 0; i < numInputs; i++) {
-    //         // shift numInputs - 1 - i
-    //         int bitVal = (combination >> (numInputs - 1 - i)) & 1;
-    //         inputNodes.arr[i]->value = bitVal;
-    //     }
-
-    //     // print each input node's value in ascending ID order
-    //     for (int i = 0; i < numInputs; i++) {
-    //         printf("%d ", inputNodes.arr[i]->value);
-    //     }
-
-    //     printf("| ");
-
-    //     // evaluate & print each output in ascending ID order
-    //     for (int i = 0; i < numOutputs; i++) {
-    //         int result = dfs(&nodes, outputNodes.arr[i]);
-    //         printf("%d ", result);
-    //     }
-    //     printf("\n");
-    // }
-
+    // 6) For each combination, assign bits to inputs, reset memo flags, compute outputs
     for (int combination = 0; combination < numCombinations; combination++) {
-    // OLD:
-    // for (int i = 0; i < numInputs; i++) {
-    //     int bitVal = (combination >> (numInputs - 1 - i)) & 1;
-    //     inputNodes.arr[i]->value = bitVal;
-    // }
+        // Set INPUT node bits (lowest bit assigned to inputNodes.arr[0], etc.)
+        for (int i = 0; i < numInputs; i++) {
+            int bitVal = (combination >> i) & 1; 
+            inputNodes.arr[i]->value = bitVal;
+        }
 
-    // NEW:
-    for (int i = 0; i < numInputs; i++) {
-        int bitVal = (combination >> i) & 1;
-        inputNodes.arr[i]->value = bitVal;
-    }
+        // Reset memoization on all nodes for this combination
+        for (int i = 0; i < (int)nodes.used; i++) {
+            nodes.arr[i]->hasCachedValue = 0;
+        }
 
-    // now, when printing, just print inputNodes.arr[i]->value in ascending order of i:
-    for (int i = 0; i < numInputs; i++) {
-        printf("%d ", inputNodes.arr[i]->value);
-    }
-    printf("| ");
+        // Print input values in ascending ID order (matching the order we sorted them)
+        for (int i = 0; i < numInputs; i++) {
+            printf("%d ", inputNodes.arr[i]->value);
+        }
+        printf("| ");
 
-    // Evaluate & print each output
-    for (int i = 0; i < numOutputs; i++) {
-        int result = dfs(&nodes, outputNodes.arr[i]);
-        if (i < numOutputs - 1) {
-            printf("%d ", result);
-        } else {
-            printf("%d", result);
+        // Evaluate and print each output in ascending ID order
+        for (int i = 0; i < numOutputs; i++) {
+            int result = dfs(&nodes, outputNodes.arr[i]);
+            if (i < numOutputs - 1) {
+                printf("%d ", result);
+            } else {
+               printf("%d", result); 
+            }
+        }
+
+        if (combination < numCombinations - 1) {
+            printf("\n");
         }
     }
 
-    if (combination < numCombinations - 1) {
-        printf("\n");
-    }
-}
-
-    // free all memory
+    // 7) Free all memory
     freeArrayListNode(&inputNodes);
     freeArrayListNode(&outputNodes);
     freeAllNodes(&nodes);
