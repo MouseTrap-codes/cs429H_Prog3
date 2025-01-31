@@ -14,7 +14,7 @@ Output=2,
 {
 Type=AND
 UniqueID=2
-Input=1, 2,
+Input=0, 1,
 Output=3,
 }
 {
